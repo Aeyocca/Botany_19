@@ -1,0 +1,1446 @@
+---
+title: "Botany_19_presentation"
+output: html_document
+---
+# Botany Conference. Tucson, AZ. July 30th, 2019
+# "Species level variation in conserved non-coding sequences"
+# All code necessary to reproduce the figures found in my presentation
+# Alan E. Yocca
+# aeyap42@gmail.com
+# @Aeyocca
+
+# Session information before loading libraries:
+```{r}
+sessionInfo()
+#> sessionInfo()
+#R version 3.5.0 (2018-04-23)
+#Platform: x86_64-apple-darwin15.6.0 (64-bit)
+#Running under: macOS  10.14.5
+#
+#Matrix products: default
+#BLAS: /System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBLAS.dylib
+#LAPACK: /Library/Frameworks/R.framework/Versions/3.5/Resources/lib/libRlapack.dylib
+#
+#locale:
+#[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+#
+#attached base packages:
+#[1] stats     graphics  grDevices utils     datasets  methods   base     
+#
+#loaded via a namespace (and not attached):
+#[1] compiler_3.5.0 tools_3.5.0    yaml_2.1.19
+```
+
+
+# Sushi plot +
+# Stacked model depth +
+# TE graph +
+# DEG stats +
+# Geo location map +
+# Length distribution
+
+# CNS length distribution:
+```{r}
+
+```
+
+# TE graph
+Code Block: TE distance
+- blasted TAIR TE set with e value of 1e-4
+- mess around with e-100
+
+```{r}
+#rm(list=ls(all=TRUE))
+library(tidyverse)
+library(ggplot2)
+
+#PosV distance vector: (third column has the distance we want)
+path = "/path_to/fold_containing_file/"
+file.names <- dir(path, pattern="*_tair_te_e10_sort_mx_moved_closest_dist_vect.txt", full.names = T)
+list_of_files <- file.names
+loaded_list_of_files_posv <- lapply(list_of_files,function(i){
+  read.table(file = i,stringsAsFactors = F, header = F, row.names = NULL)
+})
+
+#above loaded in PosV CNS, below, load in collinear CNS
+file.names <- dir(path, pattern="*_tair_te_e10_sort_mx_coll_closest_dist_vect.txt", full.names = T)
+list_of_files <- file.names
+loaded_list_of_files_coll <- lapply(list_of_files,function(i){
+  read.table(file = i,stringsAsFactors = F, header = F, row.names = NULL)
+})
+
+#get into two column data frame, Distance and Type
+dist_df = data.frame(Distance = numeric(),
+                     Type = character(),
+                     stringsAsFactors = F)
+for (i in 1:length(loaded_list_of_files_posv)) {
+  loop_df = data.frame(Distance = loaded_list_of_files_posv[[i]]$V3,
+                       Type = rep("PosV",nrow(loaded_list_of_files_posv[[i]])),
+                       stringsAsFactors = F)
+  dist_df = rbind(dist_df,loop_df)
+}
+for (i in 1:length(loaded_list_of_files_coll)) {
+  loop_df = data.frame(Distance = loaded_list_of_files_coll[[i]]$V3,
+                       Type = rep("Coll",nrow(loaded_list_of_files_coll[[i]])),
+                       stringsAsFactors = F)
+  dist_df = rbind(dist_df,loop_df)
+}
+#rename columns and refactor Type
+colnames(dist_df)=c("Distance","Type")
+dist_df$Type=as.factor(dist_df$Type)
+
+#plotsies
+dist_plot = dist_df %>% 
+  ggplot(aes(x = Distance, fill = Type)) +
+  geom_density(alpha = 0.5) +
+  xlim(-10000,10000)
+dist_plot
+#
+#absolute distance
+dist_df_abs = dist_df
+dist_df_abs$Distance = abs(dist_df_abs$Distance)
+abs_dist_plot = dist_df_abs %>% 
+  ggplot(aes(y = Distance, x = Type, fill = Type)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5) +
+  ylim(0,10000) +
+  ggtitle(label = "Distance (in basepairs) to closest TE")
+abs_dist_plot
+#
+
+#save this guy
+pdf(file = paste0(path,"abs_dist_te_e10_violin.pdf"))
+  plot(abs_dist_plot)
+dev.off()
+
+#what about if !=0 (where CNS is not itself the simple sequence)
+#nz for not zero
+abs_dist_plot_nz = dist_df_abs[which(dist_df_abs$Distance != 0),] %>% 
+  ggplot(aes(y = Distance, x = Type, fill = Type)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5) +
+  ylim(0,10000)
+abs_dist_plot_nz
+
+#stat test backing it up:
+ks.test(
+  dist_df[which(dist_df$Type == "PosV"),1],
+  dist_df[which(dist_df$Type == "Coll"),1]
+)
+#D = 0.34691, p-value < 2.2e-16
+#significantly different distributions
+#what about a t test
+t.test(
+  dist_df[which(dist_df$Type == "PosV"),1],
+  dist_df[which(dist_df$Type == "Coll"),1]
+)
+#sig
+#t = -21.323, df = 1356700, p-value < 2.2e-16
+
+#absolute distance probably more important
+ks.test(
+  dist_df_abs[which(dist_df_abs$Type == "PosV"),1],
+  dist_df_abs[which(dist_df_abs$Type == "Coll"),1]
+)
+#D = 0.58033, p-value < 2.2e-16
+t.test(
+  dist_df_abs[which(dist_df_abs$Type == "PosV"),1],
+  dist_df_abs[which(dist_df_abs$Type == "Coll"),1]
+)
+#t = -655.85, df = 1025100, p-value < 2.2e-16
+
+#sanity checks / curiosity
+tmp = dist_df_abs[which(dist_df_abs$Type == "PosV"),]
+tmp_2 = tmp[which(tmp$Distance == 0),]
+nrow(tmp_2)
+nrow(tmp)
+
+nrow(dist_df_abs[which(dist_df_abs$Type == "Coll") && which(dist_df_abs$Distance == 0),])
+tmp = dist_df_abs[which(dist_df_abs$Type == "Coll"),]
+tmp_2 = tmp[which(tmp$Distance == 0),]
+nrow(tmp_2)
+nrow(tmp)
+
+class(dist_df_abs$Distance)
+summary(tmp)
+
+```
+
+# Stacked model depth
+
+make some graphs showing distribution of things across all gene models
+
+load in everything and format together
+```{r}
+#rm(list=ls(all=TRUE))
+library(tidyverse)
+library(ggplot2)
+
+path.moved = "/path_to/posv_file"
+file.names.moved <- dir(path.moved, pattern="*mx_moved_closest_model_depth_50kb_50kb.txt", full.names = T)
+
+list_of_files <- file.names.moved
+
+loaded_list_of_files <- lapply(list_of_files,function(i){
+  read.table(file = i,stringsAsFactors = F, header = F, row.names = NULL)
+})
+
+list_col_names <- c("Type","Coords","Depth")
+for (i in 1:length(loaded_list_of_files)) {
+  colnames(loaded_list_of_files[[i]]) <- list_col_names
+}
+
+#library("plyr", lib.loc="/Library/Frameworks/R.framework/Versions/3.5/Resources/library")
+#combine in new df
+#combined_df <- data.frame(Tag = character(),
+#                          Coords = numeric(),
+#                          Depth = numeric())
+combined_df <- loaded_list_of_files[[1]]
+#View(loaded_list_of_files[[2]])
+#for (i in length(loaded_list_of_files)) {
+for (i in 2:length(loaded_list_of_files)) {
+  #?merge
+  #combined_df <- ddply(merge(combined_df,loaded_list_of_files[[i]], all.x = T), .(Type, Coords), summarise, Depth=sum(Depth))
+  combined_df <- merge(combined_df,loaded_list_of_files[[i]], by = c("Type", "Coords"))
+  #sum columns
+  combined_df$Depth <- combined_df$Depth.x + combined_df$Depth.y
+  combined_df <- combined_df[,c(1,2,5)]
+}
+
+#normalize depth
+combined_df <- combined_df %>%
+  mutate(Norm_depth = Depth / sum(combined_df$Depth))
+#View(combined_df$Depth)
+
+combined_moved <- combined_df
+#nice...
+
+
+############################################################
+#now on to collinear
+path.coll = "/path_to/collinear_file/folder/"
+file.names.coll <- dir(path.coll, pattern="*mx_coll_closest_model_depth_50kb_50kb.txt", full.names = T)
+
+list_of_files <- file.names.coll
+
+loaded_list_of_files <- lapply(list_of_files,function(i){
+  read.table(file = i,stringsAsFactors = F, header = F, row.names = NULL)
+})
+
+#list_col_names <- c("Type","Coords","Depth")
+for (i in 1:length(loaded_list_of_files)) {
+  colnames(loaded_list_of_files[[i]]) <- list_col_names
+}
+combined_df <- loaded_list_of_files[[1]]
+for (i in 2:length(loaded_list_of_files)) {
+  combined_df <- merge(combined_df,loaded_list_of_files[[i]], by = c("Type", "Coords"))
+  combined_df$Depth <- combined_df$Depth.x + combined_df$Depth.y
+  combined_df <- combined_df[,c(1,2,5)]
+}
+
+#normalize depth
+combined_df <- combined_df %>%
+  mutate(Norm_depth = Depth / sum(combined_df$Depth))
+combined_coll <- combined_df
+
+############################################################
+#now on to TAIR10
+tair10_cns_model_depth <- read.table(file = "/path_to/tair10_cns_closest_model_depth_50kb_50kb.txt",stringsAsFactors = F, header = F, row.names = NULL)
+#list_col_names <- c("Type","Coords","Depth")
+colnames(tair10_cns_model_depth) <- list_col_names
+
+#normalize depth
+tair10_cns_model_depth <- tair10_cns_model_depth %>%
+  mutate(Norm_depth = Depth / sum(tair10_cns_model_depth$Depth))
+
+############################################################
+#tair missing
+tair10_missing <- read.table(file = "/path_to/tair10_missing_closest_model_depth_50kb_50kb.txt",stringsAsFactors = F, header = F, row.names = NULL)
+#list_col_names <- c("Type","Coords","Depth")
+colnames(tair10_missing) <- list_col_names
+
+#normalize depth
+tair10_missing <- tair10_missing %>%
+  mutate(Norm_depth = Depth / sum(tair10_missing$Depth))
+
+############################################################
+#atac peaks
+
+path.atac = "/path_to_atac_coverage_data/"
+file.names.atac <- dir(path.atac, pattern="*kb.txt", full.names = T)
+
+list_of_files <- file.names.atac
+
+loaded_list_of_files <- lapply(list_of_files,function(i){
+  read.table(file = i,stringsAsFactors = F, header = F, row.names = NULL)
+})
+
+#list_col_names <- c("Type","Coords","Depth")
+for (i in 1:length(loaded_list_of_files)) {
+  colnames(loaded_list_of_files[[i]]) <- list_col_names
+}
+combined_df <- loaded_list_of_files[[1]]
+for (i in 2:length(loaded_list_of_files)) {
+  combined_df <- merge(combined_df,loaded_list_of_files[[i]], by = c("Type", "Coords"))
+  combined_df$Depth <- combined_df$Depth.x + combined_df$Depth.y
+  combined_df <- combined_df[,c(1,2,5)]
+}
+
+#normalize depth
+combined_df <- combined_df %>%
+  mutate(Norm_depth = Depth / sum(combined_df$Depth))
+combined_atac <- combined_df
+
+
+#############################################
+#across all
+cns_model_depth <- rbind(combined_coll,combined_moved,tair10_cns_model_depth, tair10_missing, combined_atac)
+
+#graph this bitch!!!
+
+#flip the sign of everything (multiply by negative 1)
+cns_model_depth$Coords_flip <- -1*cns_model_depth$Coords
+
+#cns_model_depth_graph <- cns_model_depth[cns_model_depth$Type == "tair10" | cns_model_depth$Type == "tair10_missing",] %>%
+cns_model_depth$Type_f = factor(cns_model_depth$Type, levels=c('tair10','coll','tair10_missing','moved','ATAC'))
+```
+
+graph code
+```{r}
+#rm(list=ls(all=TRUE))
+library(tidyverse)
+library(ggplot2)
+
+#save dataframe:
+#write.table(cns_model_depth, file = "/path_to/cns_atac_model_depth.txt", sep = "\t", quote = F, row.names = F)
+#read in dataframe
+cns_model_depth <- read.table(file = "/path_to/cns_atac_model_depth.txt", sep = "\t", row.names = NULL,header = T)
+
+#reorder stack
+#cns_model_depth$Type_f = factor(cns_model_depth$Type, levels=c('tair10','coll','tair10_missing','moved','ATAC'))
+
+#rename things
+colnames(cns_model_depth) <- c("Feature","Coords","Depth","Density","Gene Distance","Type_f")
+cns_model_depth$Feature <- gsub("tair10_missing","PAV",cns_model_depth$Feature)
+cns_model_depth$Feature <- gsub("tair10","Col-0",cns_model_depth$Feature)
+cns_model_depth$Feature <- gsub("coll","Collinear",cns_model_depth$Feature)
+cns_model_depth$Feature <- gsub("moved","PosV",cns_model_depth$Feature)
+
+#redo factors
+cns_model_depth$Type_f = factor(cns_model_depth$Feature, levels=c('Col-0','Collinear','PAV','PosV','ATAC'))
+levels(cns_model_depth$Type_f)
+
+cns_model_depth_graph <- cns_model_depth %>%
+  ggplot(aes(x = `Gene Distance`, y = `Density`)) +
+  geom_line(aes(colour = Feature))+
+  ylim(0,0.00175) +
+  xlim(-750,750) +
+  ggtitle("Feature density relative to the proximate gene") +
+  facet_grid(rows = vars(Type_f)) +
+  scale_color_discrete(breaks=c('Col-0','Collinear','PAV','PosV','ATAC')) +
+  theme_minimal() +
+  xlab("Gene Distance (base-pairs)") +
+  theme(legend.text=element_text(size=25),
+        legend.title = element_text(size = 25),
+        axis.text=element_text(size=25),
+        axis.title.x = element_text(size=25),
+        axis.title.y = element_text(size=25),
+        axis.text.y = element_blank(),
+        title = element_text(size=25),
+        strip.text.y = element_text(size = 20)) 
+cns_model_depth_graph
+  #cns_model_depth_graph_1500_all <- cns_model_depth_graph
+#cns_model_depth_graph_all_0.0015 <- cns_model_depth_graph
+#cns_model_depth_graph_2500_0.002 <- cns_model_depth_graph
+
+#savsies
+png(filename = "/path_to/cns_atac_model_depth_graph_stacked.png", units = "in", res = 600, width = 11, height = 8.5)
+  plot(cns_model_depth_graph)
+  dev.off()
+pdf(file = "/path_to/cns_atac_model_depth_graph_stacked.pdf", width = 11, height = 8.5)
+  plot(cns_model_depth_graph)
+  dev.off()
+
+#lower res for google slides
+png(filename = "/path_to/cns_atac_model_depth_graph_stacked_lr.png", units = "in", res = 400, width = 11, height = 8.5)
+  plot(cns_model_depth_graph)
+  dev.off()
+
+scales::show_col(scales::hue_pal()(5))
+
+#larger spike for green upstream boundary
+#check the numbers
+cns_model_depth[cns_model_depth$Coords == 0,]
+#        Type Coords Depth   Norm_depth Coords_flip
+#2008    coll  10001 10124 2.205412e-04      -10001
+#14011  moved  10001   771 7.955261e-04      -10001
+#36009 tair10  10001    36 2.960373e-05      -10001
+#48012 tair10_missing  10001     0 0.000000e+00      -10001
+cns_model_depth[cns_model_depth$Coords == -2001,]
+#        Type Coords Depth   Norm_depth Coords_flip
+#1116    coll  -2001 41518 0.0009044279        2001
+#13119  moved  -2001  5184 0.0053489068        2001
+#24007 tair10  -2001  1039 0.0008543965        2001
+#36010 tair10_missing  -2001    35 0.0008757225        2001
+
+#about 5x more likely in moved than coll, so these movements
+#are not moving towards genes, many moving to deserts
+
+#I say rerun for +/- 5kb either direction
+
+#calculate approximate depth +/- 500 bp
+for (i in c("moved", "coll", "tair10", "tair10_missing")) {
+  #test
+  #i <- "moved"
+  print(sum(cns_model_depth$Norm_depth[cns_model_depth$Type == i & cns_model_depth$Coords > -499 & cns_model_depth$Coords < 501]))
+}
+
+#View(cns_model_depth[cns_model_depth$Type == i && cns_model_depth$Type == i,])
+#class(cns_model_depth$Coords)
+```
+
+# DEG stats
+
+now have tair_eco_df for one pairwise accession, lets get code to loop through everything
+- Produces cns_exp_table
+
+```{r}
+#rm(list=ls(all=TRUE))
+library(tidyverse)
+#library(ggplot2)
+
+#get loaded_list of files
+
+suffix <- "_stringtie_cut.txt"
+path = "/path_to/stringtie_data_folder/"
+list_of_files <- dir(path, pattern=paste0("SRR.*",suffix), full.names = T)
+
+accession_list <- gsub(paste0(path,"/*"),'',list_of_files) %>%
+  gsub(suffix,'',.)
+loaded_list_of_files <- lapply(list_of_files,function(i){
+  read.table(file = i,header = T,row.names = NULL,sep = "\t")
+})
+for (i in 1:length(accession_list)) {
+  names(loaded_list_of_files)[i] <- accession_list[i]
+}
+#accession_list
+
+#combine bioreps
+eco_list <- unique(gsub("_br[12]","",names(loaded_list_of_files)))
+list_merged <- list()
+for (i in 1:length(eco_list)) {
+  sub_index <- which(grepl(eco_list[i],names(loaded_list_of_files)))
+  list_subset <- loaded_list_of_files[sub_index]
+  colnames(list_subset[[1]]) <- c("Gene","Ecotype_Coverage","Ecotype_FPKM","Ecotype_TPM")
+  colnames(list_subset[[2]]) <- c("Gene","Ecotype_Coverage2","Ecotype_FPKM2","Ecotype_TPM2")
+  
+  comb_df <- Reduce(merge,list_subset)
+  
+  comb_df$Gene <- gsub("\\.[0-9]+_[0-9]*$","",comb_df$Gene)
+  comb_df$Ecotype_sum <- (comb_df$Ecotype_FPKM + comb_df$Ecotype_FPKM2)
+  merged_uni_sort <- comb_df[order(comb_df$Gene, comb_df$Ecotype_sum),]
+  merged_uni_df <- merged_uni_sort[ ! duplicated(merged_uni_sort$Gene),]
+  
+  list_merged[[i]] <- merged_uni_df
+  names(list_merged)[i] <- eco_list[i]
+  rm(sub_index,comb_df,list_subset,merged_uni_sort,merged_uni_df)
+  
+  #first_rep <- loaded_list_of_files[[1]]
+  #second_rep <- loaded_list_of_files[[2]]
+  #colnames(second_rep) <- c("Gene","Coverage2","FPKM2","TPM2")
+  #merged_df <- merge(first_rep,second_rep, by = "Gene", all = T)
+}
+
+#load TAIR10 data
+tair_br1 <- read.table(file = paste0(path, "/TAIR10_ref_br1_stringtie_cut.txt"), header = T,row.names = NULL,sep = "\t")
+tair_br2 <- read.table(file = file = paste0(path, "/TAIR10_ref_br2_stringtie_cut.txt"), header = T,row.names = NULL,sep = "\t")
+
+#tair_br1_sub <- tair_br1[,c(1,7)]
+colnames(tair_br1) <- c("Gene","TAIR_Coverage","TAIR_FPKM","TAIR_TPM")
+colnames(tair_br2) <- c("Gene","TAIR_Coverage2","TAIR_FPKM2","TAIR_TPM2")
+
+tair_merge <- merge(tair_br1,tair_br2, by = "Gene", all = T)
+#colnames(tair_merge) <- c("gene_id","TAIR10_ref_br1","TAIR10_ref_br2")
+
+tair_merge$Gene <- gsub("\\.[0-9]+_[0-9]*$","",tair_merge$Gene)
+tair_merge$TAIR_sum <- (tair_merge$TAIR_FPKM + tair_merge$TAIR_FPKM2)
+tair_uni_sort <- tair_merge[order(tair_merge$Gene, tair_merge$TAIR_sum),]
+tair_uni_df <- tair_uni_sort[ ! duplicated(tair_uni_sort$Gene),]
+
+#load in CNS meta info:
+cns_count_info <- read.table(file = file = paste0(path, "/meta_info.txt"),sep = "\t",row.names = NULL,header = T)
+colnames(cns_count_info)[1] <- "Gene"
+colnames(cns_count_info)[2] <- "Ecotype_Gene"
+
+#subset and rename columns.. eh just do everything in this loop
+#i <- 1
+for (i in 1:length(list_merged)) {
+  #View(list_merged[[i]])
+#  list_merged[[i]] <- list_merged[[i]][,c(1,7,8)]
+  #colnames(list_merged[[i]]) <- c("gene_id",
+  #                                paste0(names(list_merged)[i],"_br1"),
+  #                                paste0(names(list_merged)[i],"_br2"))
+  #since combining across ecotypes later, just make general name
+#  colnames(list_merged[[i]]) <- c("Gene", "Ecotype_br1", "Ecotype_br2")
+  
+  #pick highest expressed homolog, sum expression
+  #sort expression, choose first in duplicated, then remove sum
+#  list_merged[[i]]$gene_id <- gsub("_[0-9]+$","",list_merged[[i]]$gene_id)
+#  list_merged[[i]]$sum <- (list_merged[[i]][,2] + list_merged[[i]][,3])
+#  list_merged[[i]] <- list_merged[[i]][order(list_merged[[i]]$gene_id,
+#                                             list_merged[[i]]$sum),]
+#  list_merged[[i]] <- list_merged[[i]][ ! duplicated(list_merged[[i]]$gene_id),]
+#  list_merged[[i]] <- list_merged[[i]][,c(1:3)]
+  
+  #combine with TAIR
+#  list_merged[[i]] <- merge(tair_merge,list_merged[[i]],by = "Gene")
+  tair_eco_df <- merge(tair_uni_df,list_merged[[i]],by = "Gene")
+  tair_eco_df <- tair_eco_df[which(! grepl("augustus",tair_eco_df$Gene)),]
+  
+  #add in ka/ks stuffs
+  cns_count_subset <- cns_count_info[which(grepl(
+    names(list_merged)[i],cns_count_info$Ecotype)),]
+  
+  #add CNS tag
+  pav_list <- scan(file = paste0(path,
+                      names(list_merged)[i],"_missing.txt"),what = character())
+  posv_list <- scan(file = paste0(path,
+                      names(list_merged)[i],"_moved.txt"),what = character())
+  cns_gene <- scan(file = paste0(path,
+                            "cns_calls/col_0_cns01_hits.txt"),what = character())
+
+  pav_list <- gsub("[0-9]*_","",pav_list)
+  posv_list <- gsub("[0-9]*_","",posv_list)
+  cns_gene <- gsub("[0-9]*_","",cns_gene)
+
+  list_merged[[i]] <- tair_eco_df %>%
+    mutate(Tag = ifelse(Gene %in% pav_list, "PAV",
+                        ifelse(Gene %in% posv_list, "PosV", 
+                               ifelse(Gene %in% cns_gene, "Collinear", "No_CNS"))))
+ #View(list_merged[[i]]) 
+ #colnames(cns_count_subset)
+  list_merged[[i]] <- merge(cns_count_subset,list_merged[[i]], by = "Gene")
+}
+
+#average expression, log linear later
+#average expression, add ecotype tag, combine? change colnames to ecotype rather than specific variabley
+
+#combine 4 dfs to one
+#install.packages("data.table")
+library(data.table) 
+cns_exp_table <- rbindlist(list_merged)
+
+#refactor ecotype column
+cns_exp_table$Ecotype <- factor(cns_exp_table$Ecotype, levels = 
+                                  unique(as.character(cns_exp_table$Ecotype)))
+#levels(cns_exp_table$Ecotype)
+#average expression column
+cns_exp_table <- cns_exp_table %>% 
+  mutate(TAIR_FPKM_avg = (TAIR_FPKM + TAIR_FPKM2) / 2) %>% 
+  mutate(Ecotype_FPKM_avg = (Ecotype_FPKM + Ecotype_FPKM2) / 2) %>% 
+  mutate(TAIR_FPKM_log_exp = log(TAIR_FPKM_avg + 1)) %>% 
+  mutate(Ecotype_FPKM_log_exp = log(Ecotype_FPKM_avg + 1)) %>% 
+  mutate(Exp_diff = Ecotype_FPKM_avg - TAIR_FPKM_avg)
+
+cns_exp_table <- cns_exp_table %>% 
+  mutate(TAIR_TPM_avg = (TAIR_TPM + TAIR_TPM2) / 2) %>% 
+  mutate(Ecotype_TPM_avg = (Ecotype_TPM + Ecotype_TPM2) / 2) %>% 
+  mutate(TAIR_TPM_log_exp = log(TAIR_TPM_avg + 1)) %>% 
+  mutate(Ecotype_TPM_log_exp = log(Ecotype_TPM_avg + 1)) %>% 
+  mutate(Exp_diff = Ecotype_TPM_avg - TAIR_TPM_avg)
+
+```
+
+alrighty, above gives us our master cns_exp_table object to plot things with
+optional cleanup code block
+```{r}
+rm(list_merged,loaded_list_of_files,tair_br1,tair_br2,tair_eco_df,tair_merge,tair_uni_df,tair_uni_sort,cns_count_info,cns_count_subset,accession_list,i,eco_list,list_of_files,path,pav_list,posv_list,suffix)
+```
+
+Check for overrepresentation of DE genes for CNS_Gain, CNS_Loss, No_Change
+- Dependency: cns_exp_table with CNS_CT
+
+```{r}
+#Get lists of DE genes?
+#Think about final data structure goal:
+#table
+#Gene<tab>CNS_CT
+
+#but subsetted all DE genes
+#also want column for up or down in ecotype
+cns_exp_table <- cns_exp_table %>% 
+  mutate(CNS_CT = ifelse(CNS_Change > 0, "CNS_Gain",
+                         ifelse(CNS_Change < 0, "CNS_Loss", "No_Change")))
+
+#load all lists? need to do this one ecotype at a time to ensure grabbing correct gene
+ecotype_list = unique(as.character(cns_exp_table$Ecotype))
+cns_de_df = data.frame()
+#i <- 1
+for (i in 1:length(ecotype_list)) {
+  DE_df <- read.table(file = paste0("/Users/alanyocca/Documents/01_athal_cns/24_RNA_seq/",
+                      ecotype_list[i],"_DE_all.txt"),sep = "\t", row.names = NULL, header = T)
+  loop_df <- cns_exp_table[which(cns_exp_table$Ecotype == ecotype_list[i]),]
+  merged_df = merge(DE_df,loop_df, by = "Gene")
+  cns_de_df = rbind(cns_de_df,merged_df)
+}  
+
+View(cns_de_df[which(cns_de_df$Gene == "AT1G02980"),])
+View(merged_df[which(merged_df$Gene == "AT1G02980"),])
+
+#are DE gene overrep in CNS loss / Gain
+#Num_cns_gain<tab>Num_cns_loss<tab>Num_no_change
+#Num_cns_gain_DE<tab>Num_cns_loss_DE<tab>Num_no_change_DE
+#Expected = 
+#prop_cns_gain
+
+cns_gain <- nrow(cns_de_df[cns_de_df$CNS_CT == "CNS_Gain",])
+cns_loss <- nrow(cns_de_df[cns_de_df$CNS_CT == "CNS_Loss",])
+cns_noch <- nrow(cns_de_df[cns_de_df$CNS_CT == "No_Change",])
+cns_gain_de <- nrow(cns_de_df[cns_de_df$CNS_CT == "CNS_Gain"
+                              & ( cns_de_df$Regulation == "Up" | cns_de_df$Regulation == "Down" ),])
+cns_loss_de <- nrow(cns_de_df[cns_de_df$CNS_CT == "CNS_Loss"
+                              & ( cns_de_df$Regulation == "Up" | cns_de_df$Regulation == "Down" ),])
+cns_noch_de <- nrow(cns_de_df[cns_de_df$CNS_CT == "No_Change"
+                              & ( cns_de_df$Regulation == "Up" | cns_de_df$Regulation == "Down" ),])
+gene_total <- (cns_gain + cns_loss + cns_noch)
+all_gene = nrow(cns_exp_table)
+de_total = nrow( cns_de_df[cns_de_df$Regulation == "Up" | cns_de_df$Regulation == "Down" ,])
+expected_vect <- c(cns_gain/gene_total, cns_loss/gene_total, cns_noch/gene_total)
+observed_vect <- c(cns_gain_de/cns_gain,cns_loss_de/cns_loss,cns_noch_de/cns_noch)
+#
+fisher_mat = rbind( c(cns_gain_de,cns_loss_de,cns_noch_de),c((cns_gain - cns_gain_de),(cns_loss - cns_loss_de), (cns_noch - cns_noch_de)))
+
+fisher_mat = rbind( c(cns_gain_de,(de_total - cns_gain_de)), c((cns_gain - cns_gain_de),(all_gene - de_total - cns_gain + (cns_gain_de))))
+#       Gains  Not_gains
+#DE
+#not_DE
+?fisher.test
+tmp <- fisher.test(fisher_mat, logp)
+
+#       CNS_Gain CNS_Loss  No_Change
+#DE     
+#Not_DE
+
+phyper(62,1998,5260-1998,131)
+#pop size : 5260
+#sample size : 131
+#Number of items in the pop that are classified as successes : 1998
+#Number of items in the sample that are classified as successes : 62    
+
+#expected sanity check:     
+#phyper(de_total*(cns_gain/all_gene), de_total, (all_gene-de_total), cns_gain, lower.tail = F)
+#expected gains: > de_total*(cns_gain/all_gene)
+#[1] 1102.387
+#observed 1529
+fisher_mat
+
+#Are DE genes overrep in CNS_Gains
+phyper(cns_gain_de, de_total, (all_gene-de_total), cns_gain, lower.tail = F)
+#[1] 1.421578e-44
+#***lower.tail = F, therefore OVERREP of gain_de in gain class
+
+#Are DE genes overrep in CNS_Losses
+phyper(cns_loss_de, de_total, (all_gene-de_total), cns_loss, lower.tail = F)
+#[1] 3.502587e-38
+#Are DE genes overrep in No_Change?
+phyper(cns_noch_de, de_total, (all_gene-de_total), cns_noch, lower.tail = T)
+#[1] 9.682371e-84
+#***lower.tail = T, therefore UNDERREP of noch_de in noch class
+
+#ayooo Genes that gain and lose CNS are enriched for differentially expressed genes
+
+#lets test gains for overrep in upreg
+#test losses for overrep in downreg
+up_total = nrow( cns_de_df[cns_de_df$Regulation == "Up",])
+down_total = nrow( cns_de_df[cns_de_df$Regulation == "Down",])
+
+cns_gain_up = nrow(cns_de_df[cns_de_df$CNS_CT == "CNS_Gain"
+                              & ( cns_de_df$Regulation == "Up" ),])
+cns_gain_down = nrow(cns_de_df[cns_de_df$CNS_CT == "CNS_Gain"
+                              & ( cns_de_df$Regulation == "Down" ),])
+
+cns_loss_up = nrow(cns_de_df[cns_de_df$CNS_CT == "CNS_Loss"
+                              & ( cns_de_df$Regulation == "Up" ),])
+cns_loss_down = nrow(cns_de_df[cns_de_df$CNS_CT == "CNS_Loss"
+                              & ( cns_de_df$Regulation == "Down" ),])
+
+cns_noch_up = nrow(cns_de_df[cns_de_df$CNS_CT == "No_Change"
+                              & ( cns_de_df$Regulation == "Up" ),])
+cns_noch_down = nrow(cns_de_df[cns_de_df$CNS_CT == "No_Change"
+                              & ( cns_de_df$Regulation == "Down" ),])
+
+#This is so pretty
+#> cns_gain_up
+#[1] 1081
+#> cns_gain_down
+#[1] 448
+#> cns_loss_up
+#[1] 198
+#> cns_loss_down
+#[1] 813
+#> cns_noch_up
+#[1] 1619
+#> cns_noch_down
+#[1] 2526
+
+
+
+up_total
+gene_total
+#Are up regulated genes overrep in CNS gains
+phyper(cns_gain_up, up_total, (all_gene-up_total), cns_gain, lower.tail = F)
+#[1] 1.30006e-165
+#Are up regulated genes overrep in CNS losses
+phyper(cns_loss_up, up_total, (all_gene-up_total), cns_loss, lower.tail = T)
+#[1] 5.41305e-11
+#*** lower.tail = T, UNDERREP of UPregulated genes in CNS losses
+#> 0.05^9       bonferroni though doesn't hold, did 9 tests here
+#[1] 1.953125e-12
+
+#Are up regulated genes overrep in No_Change
+phyper(cns_noch_up, up_total, (all_gene-up_total), cns_noch, lower.tail = T)
+#[1] 8.415018e-85
+
+
+#Are down regulated genes overrep in CNS gains
+phyper(cns_gain_down, down_total, (all_gene-down_total), cns_gain, lower.tail = T)
+#[1] 1.486378e-16
+#*** lower.tail = T, UNDERREP of DOWNregulated genes in CNS Gains
+
+#Are down regulated genes overrep in CNS losses
+phyper(cns_loss_down, down_total, (all_gene-down_total), cns_loss, lower.tail = F)
+#[1] 1.414288e-95
+#Are down regulated genes overrep in No_Change
+phyper(cns_noch_down, down_total, (all_gene-down_total), cns_noch, lower.tail = T)
+#[1] 4.461761e-16
+
+
+#get gene lists for go enrichment
+cns_gain_up_list = as.character(cns_de_df[cns_de_df$CNS_CT == "CNS_Gain"
+                              & ( cns_de_df$Regulation == "Up" ),"Gene"])
+write.table(cns_gain_up_list,file = "/Users/alanyocca/Documents/01_athal_cns/tmp_cns_gain_u_list.txt", row.names = F, col.names = F, quote = F)
+
+
+#
+?fisher.test
+sum(dhyper(118:1525, 4801, 62916 - 4801, 1525))
+
+phyper(208, 11555, (27000-11555), 2088)
+phyper(29, 11555, (27000-11555), 247)
+phyper(118, 4815, (62916-4815), 1524, lower.tail = F)
+
+phyper(241,1333,(11555 - 1333), 2417)
+phyper(765,3703,(11555 - 3703), 2417)
+
+
+
+
+```
+
+# Geo loc map
+
+```{r}
+rm(list=ls(all=TRUE))
+path = "/path_to/"
+setwd(path)
+
+library(ggplot2)
+library(tidyverse)
+#install.packages("ggmap")
+library(ggmap)
+#install.packages("ggrepel")
+library(ggrepel)
+
+#lets get our set of latitudes and longitudes into matrix?? dont know if it matters
+#Third column as id
+long_lat_eco <- read.csv(paste0(path, "1001_lat_long_eco.csv"))
+#View(head(long_lat_eco))
+
+#extract the diversity panel, if get this to work go back and add Gan_11 accession
+
+#adp_ecoid <- c(351,687,991,5353,5950,6911,6920,6933,6976,7002,7081,7183,9100,9125,9673,9764,14312)
+#instead of listing adp ecoid, pull out from file
+ecoid_table = read.table(file = paste0(path, "/final_gen_eco_cn_id.txt"), sep = "\t", header = T, row.names = NULL)
+ecoid = ecoid_table$ecotype
+
+long_lat_eco_adp <- long_lat_eco[long_lat_eco$tg_ecotypeid %in% ecoid,]
+
+#ooo weeee
+#credit to stackoverflow MattBaggs
+
+center = c(min(long_lat_eco_adp$longitude)+(max(long_lat_eco_adp$longitude)-min(long_lat_eco_adp$longitude))/2,min(long_lat_eco_adp$latitude)+(max(long_lat_eco_adp$latitude)-min(long_lat_eco_adp$latitude))/2)
+```
+
+```{r}
+#install.packages("rworldmap")
+library(rworldmap)
+
+?getMap
+newmap <- getMap(resolution = "low")
+
+
+#just trying to get practice presentation ready
+
+?points
+#pch = 16 for solid dot
+
+dev.off()
+
+#code doesn't work, there is a way to save as object in memory
+#but don't feel like learning / getting fancy, keeping for readability
+#should match code under pdf() function
+#athal_cns_map = plot(newmap, xlim = c(min(long_lat_eco_adp$longitude),
+#                      max(long_lat_eco_adp$longitude)), ylim =  
+#                      c(min(long_lat_eco_adp$latitude), 
+#                      max(long_lat_eco_adp$latitude)), asp = 1)
+#athal_cns_map = athal_cns_map + points(long_lat_eco_adp$longitude, long_lat_eco_adp$latitude, 
+#                      pch = 16, col = "red", cex = 2)
+
+
+pdf(file = paste0(path, "/world_map.pdf"))
+  plot(newmap, xlim = c(min(long_lat_eco_adp$longitude), max(long_lat_eco_adp$longitude)), ylim = c(min(long_lat_eco_adp$latitude), max(long_lat_eco_adp$latitude)), asp = 1)
+  points(long_lat_eco_adp$longitude, long_lat_eco_adp$latitude, pch = 16, col = "red", cex = 2)
+dev.off()
+
+png(file = paste0(path, "/world_map.pdf"), width = 16, height = 12, units = "in", res = 300)
+  plot(newmap, xlim = c(min(long_lat_eco_adp$longitude), max(long_lat_eco_adp$longitude)), ylim = c(min(long_lat_eco_adp$latitude), max(long_lat_eco_adp$latitude)), asp = 1)
+  points(long_lat_eco_adp$longitude, long_lat_eco_adp$latitude, pch = 16, col = "red", cex = 2)
+dev.off()
+
+```
+
+
+# Sushi plot
+Sushi_functions
+- code block just to make all the functions for the later two code blocks
+- also lets load the cns and gene annotations here ( just not the subsets )
+```{r}
+#rm(list=ls(all=TRUE))
+library(tidyverse)
+#no particular order
+tair_gene_sub = function(tair_gene_annotation,tair_chromstart,tair_chromend,chrom) {
+  tair_gene_of_interest <- tair_gene_annotation[which(tair_gene_annotation$V2 > tair_chromstart 
+                                                      & tair_gene_annotation$V3 < tair_chromend
+                                                      & tair_gene_annotation$V1 == chrom),]
+  #get the whole gene even if its off screen  
+#  
+  tair_gene_of_interest$V1 <- factor(tair_gene_of_interest$V1)
+  tair_gene_of_interest$V4 <- factor(tair_gene_of_interest$V4)  
+  return(tair_gene_of_interest)
+}
+tair_cns_sub = function(tair_cns_annotation,tair_chromstart,tair_chromend,chrom,cns_name) {
+  tair_cns_of_interest <- tair_cns_annotation[which(tair_cns_annotation$V2 > tair_chromstart
+                                                    & tair_cns_annotation$V3 < tair_chromend
+                                                    & tair_cns_annotation$V1 == chrom),]
+  
+  #convert to character so can split out just the CNS name
+  tair_cns_of_interest$V4 = as.character(tair_cns_of_interest$V4)
+  #tair_cns_of_interest = tair_cns_of_interest %>% 
+  #  separate(V4,c(NA,NA,NA,"V4",NA,NA,NA,NA),sep = "\\|\\|") 
+  #tair_cns_of_interest = tair_cns_of_interest[,which(grepl(".*",colnames(tair_cns_of_interest)))]
+  #keep labels only for the CNS we want
+  #if start / stop does not match start/ stop of CNS we want, change label to empty string
+  #so hopefully only keep label we want
+  #label them all
+#  if (! missing(cns_name)) {
+#    print("No CNS provided, keeping annotations for all CNS")  
+#    for (i in 1:nrow(tair_cns_of_interest)) {
+#      if (! grepl(cns_name,tair_cns_of_interest$V4[i])) {
+#        tair_cns_of_interest$V4[i] = paste(rep("",i), collapse = " ")
+#      }
+#    } 
+#  }
+  #tair_cns_of_interest$V4[which(tair_cns_of_interest$V4 != cns_name)] = ""
+  tair_cns_of_interest$V1 <- factor(tair_cns_of_interest$V1)
+  tair_cns_of_interest$V4 <- factor(tair_cns_of_interest$V4)  
+  if (nrow(tair_cns_of_interest) == 0) {
+    print("No CNS found")
+    tair_cns_of_interest = data.frame(V1 = chrom, 
+                                      V2 = 0, V3 = 0, V4 = "CNS", 
+                                      V5 = ".", V6 = "1", type_vect = "exon")
+  }
+  tair_cns_of_interest$V4 = gsub("_.*","",tair_cns_of_interest$V4)
+  return(tair_cns_of_interest)
+}
+
+path = "/path_to/"
+tair_cns_bed_file = paste0(path, "/TAIR10_ref_cns.bed")
+tair_gene_bed_file = paste0(path, "TAIR10_GFF3_sushi.gff")
+tair_cns_annotation <- read.table(file = tair_cns_bed_file, 
+                      sep = "\t", row.names = NULL)
+
+#find cns annotation in this file to get start/stop
+tair_cns_annotation$V6 <- gsub("-","-1",tair_cns_annotation$V6)
+tair_cns_annotation$V6 <- gsub("\\+","1",tair_cns_annotation$V6)
+type_vect <- rep("exon",nrow(tair_cns_annotation))
+tair_cns_annotation <- cbind(tair_cns_annotation,type_vect)
+#change score to period
+tair_cns_annotation$V5 <- gsub("500",".",tair_cns_annotation$V5)
+
+tair_gene_annotation <- read.table(file = tair_gene_bed_file,
+                       sep = "\t", row.names = NULL)
+tair_gene_annotation$V6 <- gsub("-","-1",tair_gene_annotation$V6)
+tair_gene_annotation$V6 <- gsub("\\+","1",tair_gene_annotation$V6)
+
+#representative transcript.. eh just take .1
+tair_gene_annotation = tair_gene_annotation[which(grepl("\\.1$",tair_gene_annotation$V4)),]
+#remove transcript tag
+tair_gene_annotation$V4 = gsub("\\.1$","",tair_gene_annotation$V4)
+
+#rm(peak_file)
+#peak_file = peak_bed
+
+atac_peak_sub = function(peak_file,chrom,chromstart,chromend) {
+  #need to get things even if they partially fall in the window..
+  #I imagine peaks wont cover entire region we are interested in... eh they might
+  #fudge it, again not perfect but this is high throughput screening and not final word
+  #so if this returns something funky and I look at it I can filter out later
+  #subset if either v2 or v3 lie within interval
+  #adjust format to that needed, then subset, just to ensure no errors in subsetting
+  
+  peak_file[,1] = as.factor(peak_file[,1])
+  peak_file[,4] = peak_file[,10]
+  peak_file[,5] = rep(".",nrow(peak_file))
+  peak_file[,6] = rep("+",nrow(peak_file))
+  peak_file[,7] = rep("exon",nrow(peak_file))
+  peak_file = peak_file[,c(1:7)]
+
+  out_bedgraph = peak_file[which( ((peak_file$V2 > chromstart & peak_file$V2 < chromend) | 
+                                  (peak_file$V3 > chromstart & peak_file$V3 < chromend) ) &
+                                  (grepl(chrom,peak_file$V1))),]
+  out_bedgraph$V4 = as.character(out_bedgraph$V4)
+  
+  if (nrow(out_bedgraph) == 0) {
+    print("No peaks found, adding dummy peak at coord Chr1, 1 so sushi plot doesn't complain")
+    out_bedgraph = data.frame(Chrom = "Chr1",
+                              Start = 1,
+                              Stop = 1,
+                              Name = "Fake Peak",
+                              Score = ".",
+                              Strand = "+",
+                              Type = "exon")
+  } else {
+    for (i in 1:nrow(out_bedgraph)) {
+      out_bedgraph$V4[i] = paste(rep("",i), collapse = " ")
+    }      
+  }
+  return(out_bedgraph)
+}
+
+make_bedgraph_plot <- function(bedgraph,chrom,chromstart,chromend,yaxis_label,colour,y_max){
+  plotBedgraph(bedgraph,chrom,chromstart, chromend, color = colour, range = c(0,y_max)) 
+  #add x axis labels, will draw stuff on top of plot, so if need to edit this,
+  #rerun plotBedgraph()
+  labelgenome(chrom,chromstart,chromend,n=4,scale = 'Kb') 
+  #use base R functions to add y-axis
+  #?mtext() == "Write Text into the Margins of a Plot"
+  mtext(yaxis_label,side = 2, line = 2.75,cex = 1,font = 2)
+  #?axis()
+  axis(side = 2,las=2,tcl=.5)
+}
+
+eco_cns_sub = function(cns_bed,chromstart,chromend,chrom,cns) {
+  cns_of_interest <- cns_bed[which(cns_bed$V2 > chromstart 
+                                   & cns_bed$V3 < chromend
+                                   & cns_bed$V1 == chrom),]
+  #convert to character so can split out just the CNS name
+  cns_of_interest$V4 = as.character(cns_of_interest$V4)
+  cns_of_interest = cns_of_interest %>% 
+    separate(V4,c(NA,NA,NA,"V4",NA,NA,NA,NA),sep = "\\|\\|") 
+  cns_of_interest = cns_of_interest[,which(grepl(".*",colnames(cns_of_interest)))]
+  #keep labels only for the CNS we want
+  #if start / stop does not match start/ stop of CNS we want, change label to empty string
+  #so hopefully only keep label we want
+  #loop through those not matching condition that we are changing to "" and make variable number of spaces
+#  if (! missing(cns)) {
+#    print("No CNS provided, keeping annotations for all CNS")
+#    for (i in 1:nrow(cns_of_interest)) {
+#      if (cns_of_interest$V4[i] != cns) {
+#        cns_of_interest$V4[i] = paste(rep("",i), collapse = " ")
+#      }
+#    }  
+#  } 
+  #cns_of_interest$V4[which(cns_of_interest$V2 != args[1])] = ""
+  #refactor, keep only levels in subset
+  cns_of_interest$V1 <- factor(cns_of_interest$V1)
+  cns_of_interest$V4 <- factor(cns_of_interest$V4)
+  #levels(cns_of_interest$V1)
+  #levels(cns_of_interest$V4)
+  if (nrow(cns_of_interest) == 0) {
+    cns_of_interest = data.frame(V1 = chrom, 
+                                 V2 = 0, V3 = 0, V4 = "CNS", 
+                                 V5 = ".", V6 = "1", type_vect = "exon")
+  }
+  #cut numbers
+  cns_of_interest$V4 = gsub("_.*","",cns_of_interest$V4)
+  return(cns_of_interest)
+}
+eco_gene_sub = function(gene_bed,chromstart,chromend,chrom) {
+  gene_of_interest <- gene_bed[which(gene_bed$V2 > chromstart
+                                     & gene_bed$V3 < chromend
+                                     & gene_bed$V1 == chrom),]
+  #convert to character so can split out just the CNS name
+  gene_of_interest$V4 = gsub("\\.[0-9]","",as.character(gene_of_interest$V4))
+  gene_of_interest = gene_of_interest %>% 
+    separate(V4,c("V4",NA),sep = "_")
+  gene_of_interest = gene_of_interest[,which(grepl(".*",colnames(gene_of_interest)))]
+  #refactor, keep only levels in subset
+  gene_of_interest$V1 <- factor(gene_of_interest$V1)
+  gene_of_interest$V4 <- factor(gene_of_interest$V4)
+  if (nrow(gene_of_interest) == 0) {
+    stop("No gene in the neighborhood, increase window size")
+  }
+  return(gene_of_interest)
+}
+
+load_eco_gene = function(srr) {
+  eco_gene_bed_file = paste0(path,
+                             srr,"_maker_tair10_sushi.gff")
+  gene_bed <- read.table(file = eco_gene_bed_file,
+                       sep = "\t", row.names = NULL)
+  gene_bed$V6 <- gsub("-","-1",gene_bed$V6)
+  gene_bed$V6 <- gsub("\\+","1",gene_bed$V6)
+  return(gene_bed)
+}
+load_eco_cns = function(srr) {
+  eco_cns_bed_file = paste0(path,
+                            srr,"_mx_all.bed")
+
+  cns_bed <- read.table(file = eco_cns_bed_file, 
+                      sep = "\t", row.names = NULL)
+  cns_bed$V6 <- gsub("-","-1",cns_bed$V6)
+  cns_bed$V6 <- gsub("\\+","1",cns_bed$V6)
+  type_vect <- rep("exon",nrow(cns_bed))
+  cns_bed <- cbind(cns_bed,type_vect)
+  #change score to period
+  cns_bed$V5 <- gsub("500",".",cns_bed$V5)
+  return(cns_bed)
+}
+load_eco_peak = function(srr) {
+  eco_atac_peaks_file = paste0(path,
+                            srr,"_atac_peaks_sort.xls")
+  eco_atac_peaks = read.table(file = eco_atac_peaks_file,
+                              sep = "\t", row.names = NULL, header = F)
+  eco_atac_peaks$V1 = gsub("\\|.*","",eco_atac_peaks$V1)
+  return(eco_atac_peaks)
+}
+
+
+tair_peak_annotation_file = paste0(path, "TAIR10_ref_atac_peaks_sort.bed")
+tair_atac_peaks = read.table(file = tair_peak_annotation_file,
+                              sep = "\t", row.names = NULL, header = F)
+tair_atac_peaks$V1 = gsub("\\|.*","",tair_atac_peaks$V1)
+
+
+```
+
+
+Tair_posv
+- Dependency: Sushi_functions
+```{r}
+#final plot name string, gather the bed subset files from this? is that possible?
+#awesome, go me put all subsets with same coordinates and cns name so this will be easy
+#hmm didnt get coords in final figure name though... make the candidate the first file we going to subset:
+#- tair_atac_bedgraph name
+
+path = "/path_to/"
+#make candidate here "tair_posv"
+candidate = "SRR1945916_bwa_alt_3_masked_64538_AT5G45490_sushi_Chr5_tair_posv_8336385_8346397_atac_subset.txt"
+#allow for usage of both bwa_alt_3 and pbj genomes
+candidate_vect = unlist(strsplit(candidate, split = "_"))
+#ssi = sushi_string_index
+ssi = which(grepl("sushi",candidate_vect))
+cns = paste(collapse = "_",candidate_vect[c((ssi - 2),(ssi - 1))])
+#candidate_vect[sushi_string_index]
+#candidate will be tair_atac, so need to sub out eco_coll, not doing rna stuff
+chrom = candidate_vect[(ssi+1)]
+chromstart = as.numeric(candidate_vect[(ssi+4)])
+chromend = as.numeric(candidate_vect[(ssi+5)])
+#Manual edit for this specific CNS
+#chromend = as.numeric(candidate_vect[(ssi+5)]) - 2000
+window_size = (chromend - chromstart) / 4
+#More manual shit
+#window_size = 2503
+#window wont be exactly right but should work
+
+#loading in all these full files, 
+#just atac bed that Im not
+srr = paste(collapse = "_",candidate_vect[(1:(ssi -3))])
+gene_bed = load_eco_gene(srr)
+cns_bed = load_eco_cns(srr)
+peak_bed = load_eco_peak(srr)
+
+tair_cns_of_interest_annotation = tair_cns_annotation[which(
+      grepl(cns,tair_cns_annotation$V4)),]
+tair_chromstart = as.numeric(tair_cns_of_interest_annotation$V2) - window_size
+tair_chromend = as.numeric(tair_cns_of_interest_annotation$V3) + window_size
+
+
+tair_cns_of_interest = tair_cns_sub(tair_cns_annotation,tair_chromstart,
+    tair_chromend,chrom,cns)
+tair_gene_of_interest = tair_gene_sub(tair_gene_annotation,tair_chromstart,tair_chromend,chrom)
+tair_atac_subset = read.table(file = paste0(path,"/",candidate), sep = "\t",row.names = NULL,header = T)
+tair_peak_subset = atac_peak_sub(tair_atac_peaks,chrom,tair_chromstart,
+              tair_chromend)
+
+#need eco coll start/stop
+
+prox_gene_dist_eco = c(100000000000)
+prox_gene = c()
+prox_exon = data.frame()
+#super messy but it works, loop through each exon in eco window, find closest exon
+#find exon closest to where CNS is in tair
+cns_number = gsub("_.*","",cns)
+tair_cns_ann = tair_cns_of_interest[which(grepl(cns_number,tair_cns_of_interest$V4)),]
+for (i in 1:nrow(tair_gene_of_interest)) {
+  loop_dist_ll = abs(tair_gene_of_interest[i,2] - as.numeric(tair_cns_ann[2]))
+  loop_dist_hl = abs(tair_gene_of_interest[i,3] - as.numeric(tair_cns_ann[2]))
+  loop_dist_lh = abs(tair_gene_of_interest[i,2] - as.numeric(tair_cns_ann[3]))
+  loop_dist_hh = abs(tair_gene_of_interest[i,3] - as.numeric(tair_cns_ann[3]))
+  #take minimum from above
+  loop_dist_min = min(loop_dist_ll,loop_dist_hl,loop_dist_lh,loop_dist_hh)
+  if(loop_dist_min < prox_gene_dist_eco) {
+    prox_gene_dist_eco = loop_dist_min
+    #actually, seems we have transcript designations, so leave it there
+    #prox_gene = gsub("\\..*","",gene_of_interest[i,4])
+    prox_gene = as.character(tair_gene_of_interest[i,4])
+    prox_exon = tair_gene_of_interest[i,]
+  }
+}
+#now have proximate gene, need window up and down, for down, get largest exon
+#prox_gene_eco_df = tair_gene_of_interest[which(grepl(gsub("\\..*","",prox_gene,tair_gene_of_interest$V4))),]
+prox_gene_tair_df = tair_gene_of_interest[which(grepl(prox_gene,tair_gene_of_interest$V4)),]
+
+pg_left_bound = min(prox_gene_tair_df$V2)
+pg_right_bound = max(prox_gene_tair_df$V3)
+#
+ec_tair_up = pg_left_bound - tair_chromstart
+ec_tair_down = tair_chromend - pg_right_bound 
+#ayyy got it, now pull annotation from gene_bed
+ec_gene_ann = gene_bed[which(grepl(gsub("\\..*","",prox_gene),gene_bed$V4)),]
+if (nrow(ec_gene_ann) == 0) {
+  stop(paste0("No collinear gene, (",prox_gene,") in ecotype for PosV CNS location in Col-0."))
+}
+
+#take only the proximate exon... tough
+#if right, take closest positive, else closest negative\
+#intronic ones should work themselves out
+#ugh, gave up programmatically determining
+print("NOW ONLY WORKING FOR THIS SPECIFIC CNS: 64538 !!!!!!!")
+ec_gene_ann = ec_gene_ann[3,]
+
+
+ec_gene_min = min(ec_gene_ann$V2)
+ec_gene_max = max(ec_gene_ann$V3)
+
+ec_chromstart = ec_gene_min - ec_tair_up
+#ec_chromend = ec_tair_down + ec_gene_max
+#Manually change
+ec_chromend = (ec_tair_down + ec_gene_max) - 1000
+
+#switch tair_posv to eco_coll
+candidate_ec = gsub("tair_posv","eco_coll",candidate)
+ec_atac_bedgraph = read.table(file = paste0(path,"/",candidate_ec), sep = "\t",row.names = NULL,header = T)
+ec_cns_of_interest = eco_cns_sub(cns_bed,ec_chromstart,ec_chromend,chrom)
+ec_gene_of_interest = eco_gene_sub(gene_bed,ec_chromstart,ec_chromend,chrom)
+#take only the proximate exon... tough
+#if right, take closest positive, else closest negative\
+#intronic ones should work themselves out
+#ugh, gave up programmatically determining
+print("NOW ONLY WORKING FOR THIS SPECIFIC CNS: 64538 !!!!!!!")
+ec_gene_of_interest = ec_gene_of_interest[3,]
+
+
+ec_peak_annotation = atac_peak_sub(peak_bed,chrom,ec_chromstart,ec_chromend)
+
+print("NOW ONLY WORKING FOR THIS SPECIFIC CNS: 64538 !!!!!!!, SEE ABOVE ABOUT EXTRACTING EXON WE WANT")
+
+```
+
+This got messier than anticipated,
+separating the graphing code for readability
+- Dependencies: Tair_posv
+```{r} 
+library(Sushi)
+atac_colour = "#00B0F6"
+gene_colour = "#00BF7D"
+cns_colour = "#A3A500"
+peak_colour = "#E76BF3"
+atac_yaxis_label = "ATAC"
+peak_yaxis_label = "Peaks"
+
+#get max value for atac tracks:
+y_max = max(max(ec_atac_bedgraph$V3),max(tair_atac_subset$V3))
+
+#Eco coll
+#?pdf
+pdf(file = paste0(path,"/../peak_screen/",srr, "_", cns, "_sushi_",chrom,"_eco_coll_tair_posv_",
+                  chromstart,"_",chromend,".pdf"),
+    width = 3.5)
+    #,width = ((2.75*1.5)/1.5), height = ((1.5*2.125)*3))
+  #par(mfrow=c(8,1),mar=c(1,4,1,1))
+  plot.new()
+  par(fig=c(0,0.1,0.5,1), new=T)
+  mtext("Accession",side = 2, line = 2.75,cex = 1,font = 2)
+  par(fig=c(0,0.1,0,0.5), new=T)
+  mtext("Col-0",side = 2, line = 2.75,cex = 1,font = 2)
+  
+  
+  par(fig=c(0.1,1,0.875,1), new=T,mar=c(1,4,1,1))
+  make_bedgraph_plot(ec_atac_bedgraph,chrom,ec_chromstart,ec_chromend,atac_yaxis_label,atac_colour,y_max)
+  
+  par(fig=c(0.1,1,0.75,0.875), new=T)
+  plotGenes(ec_peak_annotation,chrom,ec_chromstart,ec_chromend, 
+          plotgenetype = "box",labeltext = T, col = peak_colour)
+  mtext("Peak",side = 2, line = 2.75,cex = 1,font = 2)
+  
+  par(fig=c(0.1,1,0.625,0.75), new=T)
+  plotGenes(ec_cns_of_interest,chrom,ec_chromstart,ec_chromend, 
+          plotgenetype = "box",labeltext = T, col = cns_colour)
+  mtext("CNS",side = 2, line = 2.75,cex = 1,font = 2)
+  
+  par(fig=c(0.1,1,0.5,0.625), new=T)
+  plotGenes(ec_gene_of_interest,chrom,ec_chromstart,ec_chromend, 
+          plotgenetype = "box",labeltext = T, col = gene_colour)
+  mtext("Gene",side = 2, line = 2.75,cex = 1,font = 2)
+
+#Tair posv
+  par(fig=c(0.1,1,0.375,0.5), new=T)
+  make_bedgraph_plot(tair_atac_subset,chrom,tair_chromstart,tair_chromend,atac_yaxis_label,atac_colour,y_max)
+  
+  par(fig=c(0.1,1,0.25,0.375), new=T)
+  plotGenes(tair_peak_subset,chrom,tair_chromstart,tair_chromend, 
+          plotgenetype = "box",labeltext = T, col = peak_colour)
+  mtext("Peak",side = 2, line = 2.75,cex = 1,font = 2)
+  
+  par(fig=c(0.1,1,0.125,0.25), new=T)
+  plotGenes(tair_cns_of_interest,chrom,tair_chromstart,tair_chromend, 
+          plotgenetype = "box",labeltext = T, col = cns_colour)
+  mtext("CNS",side = 2, line = 2.75,cex = 1,font = 2)
+  
+  par(fig=c(0.1,1,0.0,0.125), new=T)
+  plotGenes(tair_gene_of_interest,chrom,tair_chromstart,tair_chromend, 
+          plotgenetype = "box",labeltext = T, col = gene_colour)
+  mtext("Gene",side = 2, line = 2.75,cex = 1,font = 2)
+dev.off()
+
+```
+
+
+Eco_posv
+- Dependency: Sushi_functions
+```{r}
+#final plot name string, gather the bed subset files from this? is that possible?
+#awesome, go me put all subsets with same coordinates and cns name so this will be easy
+#hmm didnt get coords in final figure name though... make the candidate the first file we going to subset:
+#- tair_atac_bedgraph name
+
+path = "/path_to/"
+#make candidate here "tair_posv"
+candidate = "SRR1945811_bwa_alt_3_masked_1499_AT4G09510_sushi_Chr4_eco_posv_63359_73374_atac_subset.txt"
+#allow for usage of both bwa_alt_3 and pbj genomes
+candidate_vect = unlist(strsplit(candidate, split = "_"))
+#ssi = sushi_string_index
+ssi = which(grepl("sushi",candidate_vect))
+cns = paste(collapse = "_",candidate_vect[c((ssi - 2),(ssi - 1))])
+#candidate_vect[sushi_string_index]
+#candidate will be tair_atac, so need to sub out eco_coll, not doing rna stuff
+chrom = candidate_vect[(ssi+1)]
+chromstart = as.numeric(candidate_vect[(ssi+4)])
+chromend = as.numeric(candidate_vect[(ssi+5)])
+window_size = (chromend - chromstart) / 2
+#window wont be exactly right but should work
+
+#loading in all these full files, 
+#just atac bed that Im not
+srr = paste(collapse = "_",candidate_vect[(1:(ssi -3))])
+gene_bed = load_eco_gene(srr)
+cns_bed = load_eco_cns(srr)
+peak_bed = load_eco_peak(srr)
+
+cns_of_interest = eco_cns_sub(cns_bed,chromstart,chromend,chrom)
+gene_of_interest = eco_gene_sub(gene_bed,chromstart,chromend,chrom)
+peak_annotation = atac_peak_sub(peak_bed,chrom,chromstart,chromend)
+atac_subset = read.table(file = paste0(path,"/",candidate), sep = "\t",row.names = NULL,header = T)
+
+prox_gene_dist_eco = c(100000000000)
+prox_gene = c()
+#super messy but it works, loop through each exon in eco window, find closest exon
+#others should be empty strings
+cns_number = gsub("_.*","",cns)
+eco_cns_ann = cns_of_interest[which(grepl(cns_number,cns_of_interest$V4)),]
+#in case > 1 CNS in this, just take the first one..
+eco_cns_ann = eco_cns_ann[1,]
+for (i in 1:nrow(gene_of_interest)) {
+  loop_dist_ll = abs(gene_of_interest[i,2] - as.numeric(eco_cns_ann[2]))
+  loop_dist_hl = abs(gene_of_interest[i,3] - as.numeric(eco_cns_ann[2]))
+  loop_dist_lh = abs(gene_of_interest[i,2] - as.numeric(eco_cns_ann[3]))
+  loop_dist_hh = abs(gene_of_interest[i,3] - as.numeric(eco_cns_ann[3]))
+  #take minimum from above
+  loop_dist_min = min(loop_dist_ll,loop_dist_hl,loop_dist_lh,loop_dist_hh)
+  if(loop_dist_min < prox_gene_dist_eco) {
+    prox_gene_dist_eco = loop_dist_min
+    #actually, seems we have transcript designations, so leave it there
+    #prox_gene = gsub("\\..*","",gene_of_interest[i,4])
+    prox_gene = gsub("\\.[0-9]*$","",as.character(gene_of_interest[i,4]))
+    print(prox_gene)
+  }
+}
+
+#test = "hello.3"
+#subbed = gsub("\\.[0-9]*","",test)
+
+#now have proximate gene, need window up and down, for down, get largest exon
+prox_gene_eco_df = gene_of_interest[which(grepl(prox_gene,gene_of_interest$V4)),]
+pg_left_bound = min(prox_gene_eco_df$V2)
+pg_right_bound = max(prox_gene_eco_df$V3)
+#
+tc_eco_up = pg_left_bound - chromstart
+tc_eco_down = chromend - pg_right_bound 
+#ayyy got it, now pull annotation from tair_gene_bed
+tc_gene_ann = tair_gene_annotation[which(grepl(prox_gene,tair_gene_annotation$V4)),]
+tc_gene_min = min(tc_gene_ann$V2)
+tc_gene_max = max(tc_gene_ann$V3)
+
+tc_chromstart = tc_gene_min - tc_eco_up
+tc_chromend = tc_eco_down + tc_gene_max
+
+tc_gene = tair_gene_sub(tair_gene_annotation,tc_chromstart,tc_chromend,chrom)
+#tc_syn_gene = tair_gene_sub(tair_gene_annotation,tc_gene_min,tc_gene_max,chrom)
+tc_cns = tair_cns_sub(tair_cns_annotation,tc_chromstart,
+                      tc_chromend,chrom,cns)
+
+candidate_tc = gsub("eco_posv","tair_coll",candidate)
+tc_atac_bedgraph = read.table(file = paste0(path,"/",candidate_tc), sep = "\t",row.names = NULL,header = T)
+tc_peak_annotation = atac_peak_sub(tair_atac_peaks,chrom,tc_chromstart,tc_chromend)
+
+```
+
+This got messier than anticipated,
+separating the graphing code for readability
+- Dependencies: Eco_posv
+```{r}
+library(Sushi)
+atac_colour = "#00B0F6"
+gene_colour = "#00BF7D"
+cns_colour = "#A3A500"
+peak_colour = "#E76BF3"
+atac_yaxis_label = "ATAC"
+peak_yaxis_label = "Peaks"
+
+#get max value for atac tracks:
+y_max = max(max(atac_subset$V3),max(tc_atac_bedgraph$V3))
+
+#manual inspection, want to cut chromstart to 66kb
+chromstart = 66000
+tc_chromstart = 66000
+
+#Eco Posv
+pdf(file = paste0(path,"/../peak_screen/",srr, "_", cns, "_sushi_",chrom,"_eco_posv_tair_coll_",
+                  chromstart,"_",chromend,".pdf"),
+    width = 3.5)
+    #,width = ((2.75*1.5)/1.5), height = ((1.5*2.125)*3))
+  par(mfrow=c(8,1),mar=c(1,4,1,1))
+  plot.new()
+  par(fig=c(0,0.1,0.5,1), new=T)
+  mtext("Accession",side = 2, line = 2.75,cex = 1,font = 2)
+  par(fig=c(0,0.1,0,0.5), new=T)
+  mtext("Col-0",side = 2, line = 2.75,cex = 1,font = 2)
+  
+  par(fig=c(0.1,1,0.875,1), new=T,mar=c(1,4,1,1))
+  make_bedgraph_plot(atac_subset,chrom,chromstart,chromend,atac_yaxis_label,atac_colour,y_max)
+  
+  par(fig=c(0.1,1,0.75,0.875), new=T,mar=c(1,4,1,1))
+  plotGenes(peak_annotation,chrom,chromstart,chromend, 
+          plotgenetype = "box",labeltext = T, col = peak_colour)
+  mtext("Peak",side = 2, line = 2.75,cex = 1,font = 2)
+  
+  par(fig=c(0.1,1,0.625,0.75), new=T,mar=c(1,4,1,1))
+  plotGenes(cns_of_interest,chrom,chromstart,chromend, 
+          plotgenetype = "box",labeltext = T, col = cns_colour)
+  mtext("CNS",side = 2, line = 2.75,cex = 1,font = 2)
+  
+  par(fig=c(0.1,1,0.5,0.625), new=T,mar=c(1,4,1,1))
+  plotGenes(gene_of_interest,chrom,chromstart,chromend, 
+          plotgenetype = "box",labeltext = T, col = gene_colour)
+  mtext("Gene",side = 2, line = 2.75,cex = 1,font = 2)
+
+#Tair coll
+  par(fig=c(0.1,1,0.375,0.5), new=T,mar=c(1,4,1,1))
+  make_bedgraph_plot(tc_atac_bedgraph,chrom,tc_chromstart,tc_chromend,atac_yaxis_label,atac_colour,y_max)
+  
+  par(fig=c(0.1,1,0.25,0.375), new=T,mar=c(1,4,1,1))
+  plotGenes(tc_peak_annotation,chrom,tc_chromstart,tc_chromend, 
+          plotgenetype = "box",labeltext = T, col = peak_colour)
+  mtext("Peak",side = 2, line = 2.75,cex = 1,font = 2)
+  
+  par(fig=c(0.1,1,0.125,0.25), new=T,mar=c(1,4,1,1))
+  plotGenes(tc_cns,chrom,tc_chromstart,tc_chromend, 
+          plotgenetype = "box",labeltext = T, col = cns_colour)
+  mtext("CNS",side = 2, line = 2.75,cex = 1,font = 2)
+  
+  par(fig=c(0.1,1,0,.125), new=T,mar=c(1,4,1,1))
+  plotGenes(tc_gene,chrom,tc_chromstart,tc_chromend, 
+          plotgenetype = "box",labeltext = T, col = gene_colour)
+  mtext("Gene",side = 2, line = 2.75,cex = 1,font = 2)
+dev.off()
+
+```
+
+
+# Length distribution
+
+```{r}
+rm(list=ls(all=TRUE))
+library(tidyverse)
+library(ggplot2)
+
+#load in all CNS
+all_cns <- read.table(file = paste0(path,"CNS_Brassicaceae_length_table.txt"),header = T, row.names = NULL, sep = "\t")
+
+#load in missing / moved all lists and mark off in Tag column
+
+missing_cns <- as.character(unlist(read.table(file = paste0(path,"/all_missing_uniq.txt"),header = F,row.names = NULL)))
+
+moved_cns <- as.character(unlist(read.table(file = paste0(path,"/all_moved_uniq.txt"),header = F,row.names = NULL)))
+
+#change tag
+#remove factor levels first
+all_cns$Tag <- as.character(all_cns$Tag)
+all_cns$Tag[all_cns$Seq_Name %in% missing_cns] <- "Missing"
+#missing_cns_len <- all_cns[all_cns$Seq_Name %in% missing_cns,]
+#missing_cns_len$Tag <- rep("Missing",nrow(missing_cns_len))
+all_cns$Tag[all_cns$Seq_Name %in% moved_cns] <- "Moved"
+#moved_cns_len <- all_cns[all_cns$Seq_Name %in% moved_cns,]
+#moved_cns_len$Tag <- rep("Moved",nrow(moved_cns_len))
+#tmp_all <- rbind(all_cns,missing_cns_len,moved_cns_len)
+#No apparent difference between collinear distribution, and all distribution
+
+
+#graph
+length_distribution <- all_cns %>%
+  ggplot(aes(Length, fill = Tag)) +
+  geom_density(aes(alpha = 0.1)) +
+  xlim(0,250) +
+  ggtitle(label = "Distribution of sequence lengths for difference classes of CNS,\nif missing or moved in at least 1 accession,\nor if collinear in every accession")
+length_distribution
+#
+
+png(filename = paste0(path,"/cns_mi_mo_length_dist.png")
+  plot(length_distribution)
+  dev.off()
+write.table(all_cns,file = paste0(path, "/cns_length_type.txt"), row.names = F, quote = F, sep = "\t")
+
+#get missing / collinear into vector and test for difference:
+missing_vect <- as.vector(all_cns$Length[all_cns$Seq_Name %in% missing_cns])
+coll_vect <- as.vector(all_cns$Length[all_cns$Tag == "Collinear"])
+moved_vect <- as.vector(all_cns$Length[all_cns$Seq_Name %in% moved_cns])
+
+ks.test(missing_vect,coll_vect)
+mean(missing_vect)
+mean(coll_vect)
+mean(moved_vect)
+```
+
+
+
